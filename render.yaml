@@ -21,4 +21,4 @@ services:
       - key: PILOT_DB_NAME
         value: public-demo
       - key: PILOT_ALLOWED_ORIGINS
-        value: https://mamapro-pilot.vercel.app,https://mamapro-pilot-impact-hub.vercel.app,https://mamapro-pilot-git-pilot-deploy-impact-hub.vercel.app
+        value: https://mamapro-pilot.vercel.app,https://mamapro-pilot-impact-hub.vercel.app,https://mamapro-pilot-git-pilot-deploy-impact-hub.vercel.app,https://mamapro-pilot-9pzgc5bic-impact-hub.vercel.app
