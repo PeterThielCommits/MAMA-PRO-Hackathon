@@ -3,7 +3,7 @@ import { IDBFactory, IDBObjectStore } from 'fake-indexeddb';
 import raw from '../src/data/catalog.json';
 import { catalogSchema } from '../src/domain/catalog';
 import { DemoRequestService } from '../src/domain/DemoRequestService';
-import { demoRequestSchema, offerSnapshot, REQUEST_TTL, UncertainStorageResult, type AttemptStorage, type DemoRequest, type RequestAttempt } from '../src/domain/demoRequest';
+import { demoRequestSchema, offerSnapshot, REQUEST_ATTEMPT_TTL, REQUEST_TTL, UncertainStorageResult, type AttemptStorage, type DemoRequest, type RequestAttempt } from '../src/domain/demoRequest';
 import { IndexedDbRequestRepository, REQUEST_DB } from '../src/data/IndexedDbRequestRepository';
 
 const catalog = catalogSchema.parse(raw);
@@ -231,6 +231,19 @@ describe('request lifecycle', () => {
     await flow.submit(offer, catalog, true);
     expect(flow.getSnapshot().error).toBe('requestConflict');
     expect(flow.getSnapshot().request).toBeNull();
+  });
+  it('the attempt TTL boundary is exact: two hours still replays, one millisecond past is expired', async () => {
+    const edge = intents({ idempotencyKey: 'key-edge', offerId: offer.id, specialistId: offer.specialistId, catalogVersion: catalog.catalogVersion, startedAt: now - REQUEST_ATTEMPT_TTL });
+    const add = vi.spyOn(repo, 'add');
+    const replay = new DemoRequestService(repo, edge, () => now);
+    await replay.submit(offer, catalog, true);
+    expect(add).toHaveBeenCalledTimes(1); expect(replay.getSnapshot().request?.idempotencyKey).toBe('key-edge');
+    add.mockClear();
+    const stale = intents({ idempotencyKey: 'key-stale', offerId: offer.id, specialistId: offer.specialistId, catalogVersion: catalog.catalogVersion, startedAt: now - REQUEST_ATTEMPT_TTL - 1 });
+    const expired = new DemoRequestService(repo, stale, () => now);
+    await expired.submit(offer, catalog, true);
+    expect(expired.getSnapshot().error).toBe('requestExpiredAttempt');
+    expect(add).not.toHaveBeenCalled(); expect(stale.read()).toBeNull();
   });
   it('serializes clear behind an in-flight submit and reports a denied tab-intent clear', async () => {
     let release!: () => void;
