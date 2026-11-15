@@ -1,0 +1,31 @@
+name: Public pilot checks
+
+on:
+  push:
+    branches: [pilot-deploy]
+  pull_request:
+    branches: [pilot-deploy]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Typecheck and unit tests
+        run: npm run check
+      - name: Pilot server integration tests
+        run: npm run test:pilot
+      - name: Production frontend build
+        run: npm run build
