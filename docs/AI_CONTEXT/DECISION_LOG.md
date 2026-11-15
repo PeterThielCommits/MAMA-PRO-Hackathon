@@ -56,3 +56,15 @@ Reuse OfferFacts, EvidenceFact/OfferEvidence and canonical verificationStatus, n
 All profile/compare public dates use Asia/Almaty and catalog.demoClock. RU keeps Intl medium; KK uses Intl numeric parts in dd.mm.yyyy order because actual Chromium rendered month M11. KK price groups are NBSP, avoiding English comma fallback; no currency/value/unit change. Native KK editorial acceptance remains pending. Existing profile fixture interception now targets fetch-only dev/dist asset URLs. Existing EXP03 reload assertion must wait for the expected card count before reading exact IDs; no assertion is removed or eligibility relaxed. Initial red/domain and browser harness failures are retained.
 
 ADR-EXP04-04: all15 feature and4 phase technical AC accepted only as AUTOMATED_SYNTHETIC_DEMO on source 2711bee46cb37aac64f98dafa14103e2dbe545b4. Preserve implementation statuses with human limits, mark separate execution_state VERIFIED_DONE. Current source/evidence hashes and actual test counts checked by context validator. No live or human acceptance inferred; stop before EXP05.
+
+## ADR-EXP05-01 — serialized request mutations and explicit clear outcome
+
+All DemoRequestService mutations and recovery reads run through one FIFO tail; submit additionally coalesces a duplicate in-flight call. Clear commits the IndexedDB store first, resets state and calls onCommitted, then removes the owned session attempt. It returns recordsCleared and intentCleared, so a denied sessionStorage removal is a visible partial outcome with a retry path, not false success or an unexplained rejection after rows were deleted. No second service, no memory fallback, no schema migration.
+
+## ADR-EXP05-02 — saved cards and display-time date zones
+
+`qoldau.saved-demo.v1` stays the versioned public-card namespace. The row schema uses ISO timestamps, canonical price kinds and a strict allowlist; at 20 cards a new distinct card evicts the oldest savedAt, and the same offerId replaces deterministically. savedAt never replaces priceConfirmedAt, and the copy is labelled a historical offline snapshot. Request runtime timestamps remain Asia/Qyzylorda; catalog-derived fact dates remain Asia/Almaty; raw ISO instants are unchanged. A future createdAt is valid and not expired early; invalid stored timestamps produce a controlled read error recoverable by clear.
+
+## ADR-EXP05-03 — map projection validation
+
+The map continues to derive offer IDs only from SearchResult.items[].matchingOfferIds. Locations require a non-empty offerId, finite in-range latitude/longitude, non-empty source and valid ISO checkedAt; invalid/duplicate locations are counted, never turned into invented pins. The text list covers every mapped offer and a separate missing list covers offers without a valid synthetic coordinate. Geolocation is optional and denial never changes search results.

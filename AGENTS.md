@@ -1,6 +1,6 @@
-> EXP-04 completed: VERIFIED_DONE (AUTOMATED_SYNTHETIC_DEMO), source `2711bee46cb37aac64f98dafa14103e2dbe545b4`, branch codex/exp-04-profile-trust-comparison. LIVE_BLOCKED; HUMAN_QA_PENDING. STOP before EXP-05. Current stage/evidence: docs/expansion/stages/EXP-04.md. Historical authorization notes below are superseded by this closure.
+> EXP-05 in progress: F076–F087, branch `codex/exp-05-demo-pwa-resilience`, base `74a3f09f7b9101783716ee33a461d84465f92b3f` (EXP-04 D closure; runtime acceptance `2711bee46cb37aac64f98dafa14103e2dbe545b4`). Audit [stage](docs/expansion/stages/EXP-05.md). LIVE_BLOCKED; HUMAN_QA_PENDING. No merge/deploy. Stop before EXP-06.
 
-> Current authorization: EXP-04 F061–F075, user request14 November2026. Branch `codex/exp-04-profile-trust-comparison`, base `7340dffa1b15e8452bf693f090f6c4085d46b158`. Audit [stage](docs/expansion/stages/EXP-04.md). LIVE_BLOCKED; HUMAN_QA_PENDING. Historical EXP-03 stop instructions below are superseded only for EXP-04. Next: B domain/trust regression.
+> Current authorization: EXP-05 F076–F087, user request 15 November 2026. Historical EXP-04/EXP-03 stop instructions below are superseded only for EXP-05. The original Research DOCX remains SOURCE_UNAVAILABLE; use the Markdown extraction and canonical CSV. Current direct user instructions override historical prompts.
 
 # MamaPro / Қолдау.Жол — восстановление контекста
 
