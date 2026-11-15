@@ -23,7 +23,7 @@ export function Pilot(){
  const run:Run=async c=>{
   setError(null);setNotice(null);const g=generation.current;
   try{const result=await pilotApi<unknown>('commands',c,csrf.current);if(g!==generation.current)throw new Error('AUTH_REQUIRED');setPending(null);if(c.op!=='summary.preview')setNotice('saved');await refresh();return result;}
-  catch(e){const key=errorKey((e as Error).message);setError(key);if(key==='auth'||(e as Error).message==='CSRF_DENIED'){generation.current++;csrf.current='';setState(null);setPending(null);}else if(key==='unavailable')setPending(c);throw e;}
+  catch(e){const key=errorKey((e as Error).message);if(key==='auth'||(e as Error).message==='CSRF_DENIED'){setError(key);generation.current++;csrf.current='';setState(null);setPending(null);}else if(key==='denied'||key==='conflict'){setPending(null);await refresh();setError(key);}else{setError(key);if(key==='unavailable')setPending(c);}throw e;}
  };
  async function login(){setLogoutPending(false);generation.current++;setState(null);setPending(null);csrf.current='';try{const result=await pilotApi<{csrf:string}>('test-login',{actor});csrf.current=result.csrf;await refresh();setNotice(null);}catch(e){setError(errorKey((e as Error).message));}}
  const allowed=(t:typeof tabs[number])=>state&&(t==='catalog'||t==='inbox'||(t==='work'&&['specialist','moderator'].includes(state.actor.role))||(t==='tracker'&&['specialist','parent'].includes(state.actor.role))||(['calendar','diary','summary'].includes(t)&&state.actor.role==='parent')||(t==='tasks'&&['specialist','parent'].includes(state.actor.role)));
