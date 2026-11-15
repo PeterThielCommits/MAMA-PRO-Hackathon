@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/api/pilot/:path*",
+      "destination": "https://mamapro-pilot-api.onrender.com/api/pilot/:path*"
+    }
+  ]
+}
