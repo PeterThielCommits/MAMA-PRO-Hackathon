@@ -33,7 +33,7 @@ export const searchInputSchema = z.strictObject({
   districtHard: z.boolean(),
   availabilityPreferred: z.boolean(),
   query: z.string().max(QUERY_MAX),
-  sort: z.enum(['relevant', 'price', 'district']),
+  sort: z.enum(['relevant', 'price', 'trust', 'district']),
 });
 export type SearchInput = z.infer<typeof searchInputSchema>;
 

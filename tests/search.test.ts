@@ -5,6 +5,7 @@ import { emptySearchInput, normalizeSearchText, searchInputSchema } from '../src
 import type { SearchInput } from '../src/domain/contracts';
 import type { Offer } from '../src/domain/catalog';
 import { evaluateOffer } from '../src/domain/matching';
+import { verificationStatus } from '../src/domain/profile';
 import { SearchService } from '../src/domain/SearchService';
 
 const catalog = catalogSchema.parse(raw);
@@ -105,5 +106,20 @@ describe('phase 7 search contract', () => {
     expect(catalog.specialists[0].verificationFacts[0].status).toBe('DOCUMENT_SEEN');
     expect(service.inspectOffer(base, 'O08')?.unknowns.map(r => r.code)).toContain('LANGUAGE_UNKNOWN');
     expect(service.inspectOffer(base, 'O10')?.unknowns.map(r => r.code)).toContain('BUDGET_FROM_REQUIRES_CONFIRMATION');
+  });
+  it('trust sort is deterministic and ranks documented evidence above a self-declaration', () => {
+    const input: SearchInput = { ...base, categoryIds: ['LOGOPED'], serviceLanguage: 'kk', format: 'offline', sort: 'trust' };
+    const weight = { SOURCE_CONFIRMED: 40, DOCUMENT_SEEN: 30, SELF_DECLARED: 15, UNVERIFIED: 0, STALE: 0, REVOKED: 0 } as const;
+    const key = (specialistId: string) => catalog.specialists.find(s => s.id === specialistId)!.verificationFacts
+      .filter(fact => fact.scope !== 'offer_data')
+      .reduce((sum, fact) => sum + weight[verificationStatus(fact, catalog.demoClock)], 0);
+    const result = service.search(input);
+    const keys = result.items.map(item => key(item.specialistId));
+    expect(keys).toEqual([...keys].sort((a, b) => b - a));
+    expect(result.items.slice(0, 2).map(item => item.specialistId)).toEqual(['S01', 'S02']);
+    expect(service.search(input)).toEqual(result);
+    // Trust never changes eligibility or counts, only the presentation order.
+    expect({ specialists: result.specialistCount, offers: result.eligibleOfferCount })
+      .toEqual({ specialists: service.search({ ...input, sort: 'relevant' }).specialistCount, offers: service.search({ ...input, sort: 'relevant' }).eligibleOfferCount });
   });
 });
