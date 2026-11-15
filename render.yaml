@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: mamapro-pilot-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: pilot-deploy
+    buildCommand: npm ci && npm run build
+    startCommand: node server/start.ts
+    healthCheckPath: /api/pilot/public
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PILOT_MODE
+        value: PILOT_TEST
+      - key: PILOT_PUBLIC_DEMO
+        value: "true"
+      - key: PILOT_DB_NAME
+        value: public-demo
+      - key: PILOT_ALLOWED_ORIGINS
+        value: https://mamapro-pilot.vercel.app,https://mamapro-pilot-impact-hub.vercel.app,https://mamapro-pilot-git-pilot-deploy-impact-hub.vercel.app
