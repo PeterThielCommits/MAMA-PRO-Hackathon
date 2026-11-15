@@ -37,7 +37,7 @@ export function createPilotServer(
       const parsed=new URL(origin);
       const host=String(req.headers.host??'');
       const allowlist=new Set((process.env.PILOT_ALLOWED_ORIGINS??'').split(',').map(v=>v.trim()).filter(Boolean));
-      allowed=parsed.origin===`https://${host}`||parsed.origin===`http://${host}`||allowlist.has(parsed.origin);
+      allowed=parsed.origin==='https://'+host||parsed.origin==='http://'+host||allowlist.has(parsed.origin);
      }catch{/* Invalid Origin is rejected below. */}
      requireThat(allowed,'ORIGIN_DENIED',403);
     }
@@ -53,18 +53,20 @@ export function createPilotServer(
    if(path==='/api/pilot/test-login'&&req.method==='POST'){
     const data=body as Record<string,unknown>;requireThat(data&&typeof data.actor==='string'&&Object.keys(data).length===1,'INVALID_INPUT',400);
     const actor=service.actor(data.actor);const token=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex');
-    const previous=req.headers.cookie?.match(/(?:^|;\\s*)qz_pilot=([a-f0-9]{64})(?:;|$)/)?.[1];if(previous)service.store.db.prepare('DELETE FROM sessions WHERE token=?').run(previous);
+    const previous=req.headers.cookie?.match(/(?:^|;\s*)qz_pilot=([a-f0-9]{64})(?:;|$)/)?.[1];if(previous)service.store.db.prepare('DELETE FROM sessions WHERE token=?').run(previous);
     service.store.db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(token,actor.id,csrf,new Date(service.clock().getTime()+3600000).toISOString());
     const secure=environment==='production'?'; Secure':'';
-    res.setHeader('Set-Cookie',`qz_pilot=${token}; HttpOnly; SameSite=Strict; Path=/api/pilot; Max-Age=3600${secure}`);json(200,{actor,csrf,mode:'PILOT_TEST'});return;
+    res.setHeader('Set-Cookie','qz_pilot='+token+'; HttpOnly; SameSite=Strict; Path=/api/pilot; Max-Age=3600'+secure);json(200,{actor,csrf,mode:'PILOT_TEST'});return;
    }
-   const token=req.headers.cookie?.match(/(?:^|;\\s*)qz_pilot=([a-f0-9]{64})(?:;|$)/)?.[1];
+   const token=req.headers.cookie?.match(/(?:^|;\s*)qz_pilot=([a-f0-9]{64})(?:;|$)/)?.[1];
    const session=service.store.db.prepare('SELECT actor,csrf FROM sessions WHERE token=? AND expires>?').get(token??'',service.now()) as {actor:string;csrf:string}|undefined;
    requireThat(session,'AUTH_REQUIRED',401);const actor=service.actor(session.actor);
    if(req.method==='GET'&&path==='/api/pilot/state'){json(200,{...service.state(actor),csrf:session.csrf});return;}
    requireThat(req.headers['x-pilot-csrf']===session.csrf,'CSRF_DENIED',403);
    if(req.method==='POST'&&path==='/api/pilot/logout'){
-    service.store.db.prepare('DELETE FROM sessions WHERE token=?').run(token!);res.setHeader('Set-Cookie','qz_pilot=; HttpOnly; SameSite=Strict; Path=/api/pilot; Max-Age=0; Secure');json(200,{ok:true});return;
+    service.store.db.prepare('DELETE FROM sessions WHERE token=?').run(token!);
+    const secure=environment==='production'?'; Secure':'';
+    res.setHeader('Set-Cookie','qz_pilot=; HttpOnly; SameSite=Strict; Path=/api/pilot; Max-Age=0'+secure);json(200,{ok:true});return;
    }
    if(req.method==='POST'&&path==='/api/pilot/commands'){json(200,service.run(actor,body));return;}
    throw new Fault('NOT_FOUND',404);
