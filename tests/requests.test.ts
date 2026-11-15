@@ -51,9 +51,10 @@ describe('IndexedDB commit contract', () => {
     await expect(repo.add(makeRow('request-3'))).resolves.toEqual(cancelled);
     await expect(repo.cancel(one.id)).resolves.toEqual(cancelled);
   });
-  it('an ID collision with another key is an error, not another successful request', async () => {
+  it('an ID collision with another key is a typed unique conflict, not another successful request', async () => {
     await repo.add(makeRow());
-    await expect(repo.add(makeRow('request-1', 'another-key'))).rejects.toHaveProperty('name', 'ConstraintError');
+    await expect(repo.add(makeRow('request-1', 'another-key'))).rejects.toMatchObject({ name: 'StorageFailure', code: 'unique_conflict' });
+    expect((await repo.getById('request-1'))?.idempotencyKey).toBe('key-1');
   });
   it('cancel failure rolls back the status; successful cancellation survives reload', async () => {
     const row = await repo.add(makeRow());
@@ -99,14 +100,29 @@ describe('IndexedDB commit contract', () => {
     expect(foreign.objectStoreNames.contains('notes')).toBe(true); foreign.close();
     expect((await factory.databases()).map(db => db.name)).toContain(REQUEST_DB);
   });
-  it('unavailable storage and schema mismatch reject rather than fall back to memory', async () => {
-    await expect(new IndexedDbRequestRepository(() => { throw new Error('denied'); }).add(makeRow())).rejects.toBeDefined();
+  it('unavailable storage and schema mismatch reject with typed codes rather than fall back to memory', async () => {
+    await expect(new IndexedDbRequestRepository(() => { throw new Error('denied'); }).add(makeRow()))
+      .rejects.toMatchObject({ name: 'StorageFailure', code: 'open_denied' });
     await new Promise<void>(resolve => {
       const open = factory.open(REQUEST_DB, 1);
       open.onupgradeneeded = () => open.result.createObjectStore('wrong-store');
       open.onsuccess = () => { open.result.close(); resolve(); };
     });
-    await expect(repo.getById('request-1')).rejects.toBeDefined();
+    await expect(repo.getById('request-1')).rejects.toMatchObject({ name: 'StorageFailure', code: 'schema_mismatch' });
+  });
+  it('invalid stored records reject as invalid_record instead of looking absent', async () => {
+    await repo.getById('missing');
+    await new Promise<void>((resolve, reject) => {
+      const open = factory.open(REQUEST_DB, 1);
+      open.onsuccess = () => {
+        const tx = open.result.transaction('requests', 'readwrite');
+        tx.objectStore('requests').put({ id: 'corrupt', createdAt: 'not-a-date' });
+        tx.oncomplete = () => { open.result.close(); resolve(); };
+        tx.onabort = () => reject(tx.error);
+      };
+    });
+    await expect(repo.getById('corrupt')).rejects.toMatchObject({ name: 'StorageFailure', code: 'invalid_record' });
+    await expect(repo.getByIdempotencyKey('missing')).resolves.toBeNull();
   });
 });
 
@@ -180,5 +196,61 @@ describe('request lifecycle', () => {
     expect(read).toHaveBeenCalledWith('old-key'); expect(add).not.toHaveBeenCalled(); expect(flow.getSnapshot().error).toBe('requestExpiredAttempt');
     await flow.submit(offer, catalog, true); expect(flow.getSnapshot().phase).toBe('recorded_demo');
     expect(flow.getSnapshot().request?.idempotencyKey).not.toBe('old-key');
+  });
+  it('rejects a forged or unpublished offer before saving any attempt intent', async () => {
+    const storage = intents(); const add = vi.spyOn(repo, 'add');
+    const flow = new DemoRequestService(repo, storage, () => now);
+    await flow.submit({ ...offer, id: 'not-in-catalog' }, catalog, true);
+    expect(flow.getSnapshot().error).toBe('requestInvalidOffer');
+    expect(flow.getSnapshot().attempt).toBeNull();
+    expect(storage.read()).toBeNull(); expect(add).not.toHaveBeenCalled();
+  });
+  it('surfaces a conflicting idempotency binding without overwriting the original row', async () => {
+    const other = catalog.offers[1];
+    const original = await repo.add(makeRow('request-1', 'key-1'));
+    const storage = intents({ idempotencyKey: 'key-1', offerId: other.id, specialistId: other.specialistId, catalogVersion: catalog.catalogVersion, startedAt: now });
+    const add = vi.spyOn(repo, 'add');
+    const flow = new DemoRequestService(repo, storage, () => now);
+    await flow.submit(other, catalog, true);
+    expect(flow.getSnapshot().error).toBe('requestConflict'); expect(flow.getSnapshot().request).toBeNull();
+    expect(add).not.toHaveBeenCalled(); await expect(repo.getById('request-1')).resolves.toEqual(original);
+  });
+  it('shows the historical row instead of duplicating it when the catalog version advanced', async () => {
+    const row = await repo.add(makeRow());
+    const next = { ...catalog, catalogVersion: `${catalog.catalogVersion}-next` };
+    const storage = intents({ idempotencyKey: 'key-1', offerId: offer.id, specialistId: offer.specialistId, catalogVersion: catalog.catalogVersion, startedAt: now });
+    const add = vi.spyOn(repo, 'add');
+    const flow = new DemoRequestService(repo, storage, () => now);
+    await flow.submit(offer, next, true);
+    expect(flow.getSnapshot().request).toEqual(row); expect(flow.getSnapshot().phase).toBe('recorded_demo');
+    expect(add).not.toHaveBeenCalled();
+  });
+  it('a stored result bound to another identity is a conflict, never an accepted request', async () => {
+    vi.spyOn(repo, 'add').mockResolvedValueOnce({ ...makeRow(), offerId: catalog.offers[1].id });
+    const flow = new DemoRequestService(repo, intents(), () => now);
+    await flow.submit(offer, catalog, true);
+    expect(flow.getSnapshot().error).toBe('requestConflict');
+    expect(flow.getSnapshot().request).toBeNull();
+  });
+  it('serializes clear behind an in-flight submit and reports a denied tab-intent clear', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const add = repo.add.bind(repo);
+    let savedId = '';
+    vi.spyOn(repo, 'add').mockImplementation(async record => { await gate; const saved = await add(record); savedId = saved.id; return saved; });
+    const clear = vi.spyOn(repo, 'clear');
+    const storage = intents();
+    const flow = new DemoRequestService(repo, { ...storage, clear: () => { throw new Error('denied'); } }, () => now);
+    const submitting = flow.submit(offer, catalog, true);
+    await vi.waitFor(() => expect(flow.getSnapshot().phase).toBe('submitting'));
+    const clearing = flow.clear();
+    await Promise.resolve();
+    expect(clear).not.toHaveBeenCalled();
+    release();
+    await submitting;
+    await expect(clearing).resolves.toEqual({ recordsCleared: true, intentCleared: false });
+    expect(clear).toHaveBeenCalledTimes(1);
+    await expect(repo.getById(savedId)).resolves.toBeNull();
+    expect(flow.getSnapshot().phase).toBe('draft');
   });
 });
