@@ -1,0 +1,10 @@
+
+Running 6 tests using 1 worker
+
+[1/6] tests\pilot-e2e\exp05-pwa.spec.ts:18:1 тА║ production shell manifest is versioned and every declared public asset is served and cached
+[2/6] tests\pilot-e2e\exp05-pwa.spec.ts:39:1 тА║ offline public route reopens the committed demo request while the private pilot stays server-bound
+[3/6] tests\pilot-e2e\exp05-pwa.spec.ts:57:1 тА║ saved card keeps one row per offer and the catalog confirmation instant survives re-saving
+[4/6] tests\pilot-e2e\exp05-pwa.spec.ts:73:1 тА║ corrupt saved-card storage is surfaced and never overwritten by a failed save
+[5/6] tests\pilot-e2e\offline.spec.ts:2:1 тА║ explicit synthetic saved card survives offline reload; private API and pilot excluded from public caches
+[6/6] tests\pilot-e2e\offline.spec.ts:10:1 тА║ map reuses current result, geolocation denied keeps manual search and list alternative
+  6 passed (15.2s)

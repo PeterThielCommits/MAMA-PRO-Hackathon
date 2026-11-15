@@ -1,0 +1,7 @@
+
+Running 3 tests using 2 workers
+
+[1/3] tests\e2e\exp05-map.spec.ts:29:1 тА║ optional geolocation denial never changes the result or removes manual search
+[2/3] tests\e2e\exp05-map.spec.ts:3:1 тА║ map is the same search projection and its numbered markers map to the complete list
+[3/3] tests\e2e\exp05-map.spec.ts:44:1 тА║ map stays keyboard operable at 320, 390 and 1280 with 200% text in RU and KK
+  3 passed (8.6s)
