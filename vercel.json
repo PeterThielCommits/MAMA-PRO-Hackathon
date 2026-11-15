@@ -4,6 +4,10 @@
     {
       "source": "/api/pilot/:path*",
       "destination": "https://mamapro-pilot-api.onrender.com/api/pilot/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
