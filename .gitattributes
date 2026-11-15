@@ -1,0 +1,23 @@
+# Normalize line endings on commit: LF in the repository.
+# (The 2026-11-11 snapshot was saved on Windows with CRLF; without this,
+# every touched file would show a full-file diff against the LF baseline.)
+* text=auto eol=lf
+
+# Windows scripts keep CRLF so they stay runnable in cmd.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binaries — never normalize.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.zip binary
+*.pdf binary
+*.mp3 binary
+*.mp4 binary

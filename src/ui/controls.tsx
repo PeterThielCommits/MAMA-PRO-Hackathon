@@ -86,7 +86,9 @@ export function PageTitle({ children, intro }: { children: ReactNode; intro?: st
   return <div className="page-title"><h1 tabIndex={-1} data-page-title>{children}</h1>{intro && <p>{intro}</p>}</div>;
 }
 
-export type IconName = 'search' | 'sliders' | 'sort-relevant' | 'sort-price' | 'sort-district' | 'map' | 'pin' | 'any';
+export type IconName = 'search' | 'sliders' | 'sort-relevant' | 'sort-price' | 'sort-trust' | 'sort-district' | 'map' | 'pin' | 'any'
+  | 'locate' | 'rotate-left' | 'rotate-right' | 'tilt-up' | 'tilt-down' | 'zoom-in' | 'zoom-out' | 'reset'
+  | 'cloud' | 'shield' | 'spark' | 'check' | 'arrow' | 'layers' | 'heart';
 
 /**
  * Tiny inline icon set (§13.2: no external assets). Decorative only:
@@ -98,10 +100,26 @@ export function Icon({ name }: { name: IconName }) {
     {name === 'sliders' && <><path d="M4 7h8M20 7h-4M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2.2" /><circle cx="10" cy="17" r="2.2" /></>}
     {name === 'sort-relevant' && <><path d="M12 3l2.1 5.3L19.5 10l-5.4 1.7L12 17l-2.1-5.3L4.5 10l5.4-1.7Z" /><path d="M18.6 15.8l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8Z" /></>}
     {name === 'sort-price' && <><path d="M12 3v13" /><path d="M7 11l5 5 5-5" /><path d="M5 20h14" /></>}
+    {name === 'sort-trust' && <><path d="M12 3l7 3v5c0 4.4-2.8 7.6-7 10-4.2-2.4-7-5.6-7-10V6Z" /><path d="M9 12l2 2 4-4" /></>}
     {name === 'sort-district' && <><path d="M12 21s-6.8-5.4-6.8-11A6.8 6.8 0 0 1 18.8 10c0 5.6-6.8 11-6.8 11Z" /><circle cx="12" cy="10" r="2.4" /></>}
     {name === 'map' && <><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z" /><path d="M9 4v14M15 6v14" /></>}
     {name === 'pin' && <><path d="M12 21s-6.8-5.4-6.8-11A6.8 6.8 0 0 1 18.8 10c0 5.6-6.8 11-6.8 11Z" /><circle cx="12" cy="10" r="2.4" /></>}
     {name === 'any' && <><circle cx="5.5" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="18.5" cy="12" r="1.4" fill="currentColor" stroke="none" /></>}
+    {name === 'locate' && <><circle cx="12" cy="12" r="3.2" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /><circle cx="12" cy="12" r="7.2" /></>}
+    {name === 'rotate-left' && <><path d="M4 10a8 8 0 1 1 2.3 8.5" /><path d="M4 4v6h6" /></>}
+    {name === 'rotate-right' && <><path d="M20 10a8 8 0 1 0-2.3 8.5" /><path d="M20 4v6h-6" /></>}
+    {name === 'tilt-up' && <><path d="M4 16l8-8 8 8" /><path d="M4 21h16" /></>}
+    {name === 'tilt-down' && <><path d="M4 8l8 8 8-8" /><path d="M4 3h16" /></>}
+    {name === 'zoom-in' && <><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2M11 8v6M8 11h6" /></>}
+    {name === 'zoom-out' && <><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2M8 11h6" /></>}
+    {name === 'reset' && <><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /></>}
+    {name === 'cloud' && <><path d="M7 18h10a4 4 0 0 0 .6-8 6 6 0 0 0-11.3 1.6A3.2 3.2 0 0 0 7 18Z" /></>}
+    {name === 'shield' && <><path d="M12 3l7 3v5c0 4.4-2.8 7.6-7 10-4.2-2.4-7-5.6-7-10V6Z" /><path d="M9 12l2 2 4-4" /></>}
+    {name === 'spark' && <><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z" /><path d="M19 16l.7 1.8L21.5 18l-1.8.7L19 20l-.7-1.3L16.5 18l1.8-.2Z" /></>}
+    {name === 'check' && <><path d="M4 12l5 5L20 6" /></>}
+    {name === 'arrow' && <><path d="M4 12h16M14 6l6 6-6 6" /></>}
+    {name === 'layers' && <><path d="M12 3l9 5-9 5-9-5Z" /><path d="M3 12l9 5 9-5M3 16l9 5 9-5" /></>}
+    {name === 'heart' && <><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z" /></>}
   </svg>;
 }
 

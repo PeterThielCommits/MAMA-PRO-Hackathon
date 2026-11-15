@@ -2,6 +2,7 @@ import { catalogSchema, type Catalog, type Offer } from './catalog';
 import { districtApplies, normalizeSearchInput, normalizeSearchText, type Category, type SearchInput } from './contracts';
 import { fixedClock, FRESHNESS_POLICY, isFresh, type Clock } from './freshness';
 import { applicableFactors, evaluateOffer, type OfferEvaluation, type MatchReason } from './matching';
+import { verificationStatus } from './profile';
 export { isFresh } from './freshness';
 export type { MatchReason as Reason } from './matching';
 
@@ -68,6 +69,18 @@ export class SearchService {
     return !evaluation.ranking.known.district ? 2 : offer.districtId === input.districtId ? 0 : 1;
   }
 
+  // Trust sort is explicitly about *documented* evidence, not about the
+  // specialist's quality or clinical suitability. A confirmed document ranks
+  // above a self-declaration; stale/revoked evidence never creates trust.
+  private trustSortKey(specialistId: string): number {
+    const specialist = this.catalog.specialists.find(s => s.id === specialistId);
+    if (!specialist) return 0;
+    const weight = { SOURCE_CONFIRMED: 40, DOCUMENT_SEEN: 30, SELF_DECLARED: 15, UNVERIFIED: 0, STALE: 0, REVOKED: 0 } as const;
+    return specialist.verificationFacts
+      .filter(fact => fact.scope !== 'offer_data')
+      .reduce((sum, fact) => sum + weight[verificationStatus(fact, this.catalog.demoClock)], 0);
+  }
+
   private toRated(e: OfferEvaluation): RatedOffer {
     return { specialistId: e.specialistId, selectedOfferId: e.offerId, score: e.score, coverage: e.coverage,
       reasons: e.reasons, unknowns: e.unknowns, mismatches: e.mismatches, status: e.eligibility === 'eligible' ? 'exact' : 'incomplete' };
@@ -90,6 +103,11 @@ export class SearchService {
     const districtKeys = input.sort === 'district' && districtApplies(input) && input.districtId !== null
       ? new Map(this.catalog.offers.map(o => [o.id, this.districtSortKey(input, o, clock)]))
       : null;
+    // Trust keys are specialist-level, computed once per search (same O(n)
+    // discipline as the district-key fix). They never change eligibility.
+    const trustKeys = input.sort === 'trust'
+      ? new Map(this.catalog.specialists.map(s => [s.id, this.trustSortKey(s.id)]))
+      : null;
     const compare = (a: RatedOffer, b: RatedOffer): number => {
       const ao = byId.get(a.selectedOfferId), bo = byId.get(b.selectedOfferId);
       if (!ao || !bo) throw new Error('INVALID_SEARCH_SELECTION');
@@ -100,6 +118,10 @@ export class SearchService {
         const diff = ag - bg || ap - bp;
         if (diff) return diff;
         return a.specialistId.localeCompare(b.specialistId) || a.selectedOfferId.localeCompare(b.selectedOfferId);
+      }
+      if (trustKeys) {
+        const diff = (trustKeys.get(b.specialistId) ?? 0) - (trustKeys.get(a.specialistId) ?? 0);
+        if (diff) return diff;
       }
       if (districtKeys) {
         const diff = districtKeys.get(ao.id)! - districtKeys.get(bo.id)!;
