@@ -22,18 +22,23 @@ import { DemoRequestsProvider } from './DemoRequests';
 function FocusOnNavigation() {
   const location = useLocation();
   const { catalogView } = useApp();
-  const previousPath = useRef<string | null>(null);
+  const previous = useRef<{ key: string; pathname: string } | null>(null);
   useLayoutEffect(() => {
-    const sameProfile = previousPath.current === location.pathname && location.pathname.startsWith('/specialists/');
-    previousPath.current = location.pathname;
+    // StrictMode may replay this effect after the user already pressed Tab.
+    if (previous.current?.key === location.key) return;
+    const sameProfile = previous.current?.pathname === location.pathname && location.pathname.startsWith('/specialists/');
+    previous.current = { key: location.key, pathname: location.pathname };
     // A radio selection updates the URL without stealing focus or jumping up.
     if (sameProfile) return;
     if (location.pathname === '/specialists' && catalogView.focusId) {
-      document.getElementById(catalogView.focusId)?.focus({ preventScroll: true });
-      window.scrollTo({ top: catalogView.scrollY, behavior: 'instant' });
-      return;
+      const opener = document.getElementById(catalogView.focusId);
+      if (opener) {
+        opener.focus({ preventScroll: true });
+        window.scrollTo({ top: catalogView.scrollY, behavior: 'instant' });
+        return;
+      }
     }
-    document.querySelector<HTMLElement>('[data-page-title]')?.focus();
+    (document.querySelector<HTMLElement>('[data-page-title]') ?? document.getElementById('main'))?.focus();
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [location.key]);
   return null;

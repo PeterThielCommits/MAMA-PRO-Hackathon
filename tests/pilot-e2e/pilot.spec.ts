@@ -34,6 +34,11 @@ test('server failure keeps fields, no false local success, locale and 320px refl
 test('lost acknowledgement after server commit retries the original operation once',async({page})=>{
  await page.goto('/pilot');await login(page,'PARENT_A');await tab(page,'Цели и наблюдения');await page.locator('summary').filter({hasText:'Добавить цель'}).click();const form=page.locator('form').filter({has:page.getByRole('textbox',{name:'Цель для обсуждения',exact:true})});const text=`Commit then timeout ${Date.now()}`;await form.getByRole('textbox',{name:'Цель для обсуждения',exact:true}).fill(text);
  await page.route('**/api/pilot/commands',async route=>{await route.fetch();await route.abort('failed');},{times:1});await form.getByRole('button',{name:'Сохранить на сервере',exact:true}).click();await expect(page.getByRole('alert')).toContainText('Локального сохранения нет');await page.getByRole('button',{name:'Повторить с тем же ключом',exact:true}).click();await expect(page.locator('article').filter({hasText:text})).toHaveCount(1);
+ const next=`After retry ${Date.now()}`;
+ await form.getByRole('textbox',{name:'Цель для обсуждения',exact:true}).fill(next);
+ await form.getByRole('button',{name:'Сохранить на сервере',exact:true}).click();
+ await expect(page.locator('article').filter({hasText:next})).toHaveCount(1);
+ await expect(page.locator('article').filter({hasText:text})).toHaveCount(1);
 });
 
 test('keyboard creates a personal event in accessible agenda without appointment confirmation',async({page})=>{
@@ -42,4 +47,52 @@ test('keyboard creates a personal event in accessible agenda without appointment
 
 test('failed logout clears private screen without falsely claiming session revocation',async({page})=>{
  await page.goto('/pilot');await login(page,'PARENT_A');await page.route('**/api/pilot/logout',route=>route.fulfill({status:503,contentType:'application/json',body:'{"error":"SERVER_ERROR"}'}));await page.getByRole('button',{name:'Выйти и убрать данные с экрана',exact:true}).click();await expect(page.getByRole('alert')).toContainText('выход на сервере не подтверждён');await expect(page.getByRole('navigation',{name:'Тестовый пилот',exact:true})).toHaveCount(0);await page.unroute('**/api/pilot/logout');await page.getByRole('button',{name:'Повторить выход',exact:true}).click();await expect(page.getByRole('button',{name:'Повторить выход',exact:true})).toHaveCount(0);expect((await page.request.get('/api/pilot/state')).status()).toBe(401);
+});
+
+test('a rejected edit reloads the resource version and preserves the draft for review', async ({ page }) => {
+ await page.goto('/pilot');
+ await login(page,'PARENT_A');
+ const { csrf }=await (await page.request.get('/api/pilot/state')).json();
+ const command=(data:unknown)=>page.request.post('/api/pilot/commands',{headers:{'x-pilot-csrf':csrf},data});
+ const title=`Conflict goal ${Date.now()}`;
+ const created=await command({op:'goal.create',key:crypto.randomUUID(),text:title,discussedOn:null});
+ expect(created.ok()).toBe(true);
+ const { id,version }=await created.json();
+ await page.getByRole('button',{name:'Обновить с сервера',exact:true}).click();
+ await tab(page,'Цели и наблюдения');
+ const card=page.getByRole('article').filter({hasText:title});
+ await card.getByRole('button',{name:'Изменить',exact:true}).click();
+ const draft=`${title} draft`;
+ await card.getByRole('textbox',{name:'Цель для обсуждения',exact:true}).fill(draft);
+ expect((await command({op:'goal.edit',id,version,text:`${title} server`,discussedOn:null})).ok()).toBe(true);
+ await card.getByRole('button',{name:'Сохранить на сервере',exact:true}).click();
+ await expect(page.getByRole('alert')).toContainText('Данные изменились');
+ await expect(card.getByRole('heading')).toHaveText(`${title} server`);
+ await expect(card.getByRole('textbox',{name:'Цель для обсуждения',exact:true})).toHaveValue(draft);
+ await card.getByRole('button',{name:'Сохранить на сервере',exact:true}).click();
+ await expect(card.getByRole('heading')).toHaveText(draft);
+});
+
+test('a command response from a logged-out participant does not override the new session', async ({ page }) => {
+ await page.goto('/pilot');
+ await login(page,'PARENT_A');
+ await tab(page,'Цели и наблюдения');
+ await page.locator('summary').filter({hasText:'Добавить цель'}).click();
+ const form=page.locator('form').filter({has:page.getByRole('textbox',{name:'Цель для обсуждения',exact:true})});
+ await form.getByRole('textbox',{name:'Цель для обсуждения',exact:true}).fill('Pending only in previous session');
+ let release!:()=>void;
+ const held=new Promise<void>(resolve=>{release=resolve;});
+ let captured!:()=>void;
+ const started=new Promise<void>(resolve=>{captured=resolve;});
+ await page.route('**/api/pilot/commands',async route=>{
+  captured();await held;await route.fulfill({status:409,json:{error:'VERSION_CONFLICT'}});
+ },{times:1});
+ try{
+  await form.getByRole('button',{name:'Сохранить на сервере',exact:true}).click();await started;
+  await login(page,'PARENT_B');
+  const received=page.waitForResponse('**/api/pilot/commands');release();await received;
+  await tab(page,'Цели и наблюдения');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.getByText('Pending only in previous session')).toHaveCount(0);
+ }finally{release();}
 });

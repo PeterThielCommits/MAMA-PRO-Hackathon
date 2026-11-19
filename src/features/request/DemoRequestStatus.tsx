@@ -84,6 +84,6 @@ function SnapshotFacts({ snapshot }: { snapshot: DemoRequest['nonPersonalOfferSn
     <p>{price} · {snapshot.durationMinutes === null ? t('durationUnknown') : t('duration', { minutes: snapshot.durationMinutes })} · {t(snapshot.unit)}</p>
     <dl className="offer-facts"><div><dt>{t('serviceLanguage')}</dt><dd>{snapshot.languages?.map(lang => t(lang === 'ru' ? 'russian' : 'kazakh')).join(', ') || t('unknown')}</dd></div>
       <div><dt>{t('format')}</dt><dd>{t(snapshot.format === 'unknown' ? 'unknown' : snapshot.format)}</dd></div></dl>
-    <p className="help">{snapshot.priceConfirmedAt ? t('priceDate', { date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'Asia/Qyzylorda' }).format(new Date(snapshot.priceConfirmedAt)) }) : t('priceDateUnknown')}</p>
+    <p className="help">{snapshot.priceConfirmedAt ? t('priceDate', { date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'Asia/Almaty' }).format(new Date(snapshot.priceConfirmedAt)) }) : t('priceDateUnknown')}</p>
   </>;
 }

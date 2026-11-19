@@ -2,10 +2,6 @@ name: Integrity and build checks
 
 on:
   push:
-    branches:
-      - phases-0-67
-      - completion-audit-2026-11-11
-      - completion-fixes-2026-11-11
   pull_request:
 
 permissions:
@@ -29,3 +25,11 @@ jobs:
         run: npm run check
       - name: Production static build (DEMO only)
         run: npm run build
+      - name: Install locked Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Browser tests (dev, release, pilot and offline)
+        run: |
+          npm run test:e2e -- --workers=2
+          npm run check:release -- --workers=2
+          npx playwright test --config playwright.pilot.config.ts
+          npx playwright test --config playwright.offline.config.ts

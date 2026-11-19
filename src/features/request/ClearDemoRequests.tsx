@@ -7,12 +7,17 @@ export function ClearDemoRequests({ onCleared, onRecheck }: { onCleared?: () => 
   const { t } = useApp();
   const service = useDemoRequests();
   const [open, setOpen] = useState(false);
-  const [state, setState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
+  const [state, setState] = useState<'idle' | 'busy' | 'done' | 'partial' | 'error'>('idle');
   const busy = useRef(false);
   async function clear() {
     if (busy.current) return;
     busy.current = true; setState('busy');
-    try { await service.clear(onCleared); setState('done'); setOpen(false); }
+    try {
+      const outcome = await service.clear(onCleared);
+      // Records are authoritative only after the IndexedDB transaction commits.
+      // A denied tab-intent removal is surfaced as an explicit partial result.
+      setState(outcome.intentCleared ? 'done' : 'partial'); setOpen(false);
+    }
     catch { setState('error'); onRecheck?.(); }
     finally { busy.current = false; }
   }
@@ -20,6 +25,7 @@ export function ClearDemoRequests({ onCleared, onRecheck }: { onCleared?: () => 
     <p className="help">{t('requestRetention')}</p>
     <button type="button" className="button text-button" onClick={() => { setState('idle'); setOpen(true); }}>{t('requestClear')}</button>
     {state === 'done' && <p role="status">{t('requestCleared')}</p>}
+    {state === 'partial' && <p role="alert" className="field-error">{t('requestClearPartial')}</p>}
     {open && <Modal titleId="clear-requests-title" onDismiss={() => { if (!busy.current) setOpen(false); }}>
       <h2 id="clear-requests-title">{t('requestClearTitle')}</h2><p>{t('requestClearHelp')}</p>
       {state === 'error' && <p role="alert" className="field-error">{t('requestClearError')}</p>}

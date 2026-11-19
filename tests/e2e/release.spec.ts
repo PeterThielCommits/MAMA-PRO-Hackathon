@@ -27,6 +27,11 @@ for (const locale of ['ru', 'kk'] as const) {
       await expect(page.locator('.site-header')).toBeVisible();
     }
     expect((await request.get('/assets/missing.js')).status()).toBe(404);
+    expect((await request.get('/assets')).status()).toBe(404);
+    for (const response of [await request.get('/api'), await request.post('/api/pilot/commands')]) {
+      expect(response.status()).toBe(503);
+      expect(await response.json()).toEqual({ error: 'LIVE_BLOCKED' });
+    }
     expect((await request.post('/request/O01')).status()).toBe(405);
     for (const path of assets) {
       const response = await request.get(path);

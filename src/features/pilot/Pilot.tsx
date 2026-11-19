@@ -14,21 +14,75 @@ import { PrivateRecords, Summary, Tasks } from './PrivateRecords';
 const actors=['PARENT_A','PARENT_B','SPECIALIST_A','SPECIALIST_B','MODERATOR','ADMIN'] as const;
 const tabs=['catalog','work','tracker','calendar','diary','tasks','summary','inbox'] as const;
 export function Pilot(){
- const {s,status}=useWords();const [state,setState]=useState<PilotState|null>(null),[actor,setActor]=useState('PARENT_A'),[tab,setTab]=useState<typeof tabs[number]>('catalog'),[error,setError]=useState<PilotKey|null>(null),[notice,setNotice]=useState<PilotKey|null>(null),[pending,setPending]=useState<Command|null>(null);
- const csrf=useRef(''),mounted=useRef(true),generation=useRef(0);
+ const {s,status}=useWords();const [state,setState]=useState<PilotState|null>(null),[actor,setActor]=useState('PARENT_A'),[tab,setTab]=useState<typeof tabs[number]>('catalog'),[error,setError]=useState<PilotKey|null>(null),[notice,setNotice]=useState<PilotKey|null>(null),[pending,setPending]=useState<{ command:Command; onCommitted?:()=>void }|null>(null);
+ const csrf=useRef(''),mounted=useRef(true),generation=useRef(0),refreshId=useRef(0);
  const [loading,setLoading]=useState(true),[logoutPending,setLogoutPending]=useState(false);
- async function logout(){generation.current++;setState(null);setPending(null);setNotice(null);setTab('catalog');try{await pilotApi('logout',{},csrf.current);csrf.current='';setLogoutPending(false);setError(null);}catch{setLogoutPending(true);setError('logoutUnconfirmed');}}
- async function refresh(){const g=generation.current;try{const result=await pilotApi<PilotState&{csrf:string}>('state');if(mounted.current&&g===generation.current){csrf.current=result.csrf;setState(result);setError(null);}}catch(e){if(mounted.current&&g===generation.current){const key=errorKey((e as Error).message);setError(key);if(key==='auth'){setState(null);csrf.current='';}}}finally{if(mounted.current)setLoading(false);}}
- useEffect(()=>{mounted.current=true;void refresh();return()=>{mounted.current=false;generation.current++;};},[]);
- const run:Run=async c=>{
-  setError(null);setNotice(null);const g=generation.current;
-  try{const result=await pilotApi<unknown>('commands',c,csrf.current);if(g!==generation.current)throw new Error('AUTH_REQUIRED');setPending(null);if(c.op!=='summary.preview')setNotice('saved');await refresh();return result;}
-  catch(e){const key=errorKey((e as Error).message);setError(key);if(key==='auth'||(e as Error).message==='CSRF_DENIED'){generation.current++;csrf.current='';setState(null);setPending(null);}else if(key==='unavailable')setPending(c);throw e;}
+ const isCurrent=(g:number)=>mounted.current&&g===generation.current;
+ const resetSession=()=>{
+  const g=++generation.current;
+  csrf.current='';setState(null);setPending(null);setNotice(null);setError(null);setTab('catalog');
+  return g;
  };
- async function login(){setLogoutPending(false);generation.current++;setState(null);setPending(null);csrf.current='';try{const result=await pilotApi<{csrf:string}>('test-login',{actor});csrf.current=result.csrf;await refresh();setNotice(null);}catch(e){setError(errorKey((e as Error).message));}}
+ async function logout(){
+  const token=csrf.current;
+  const g=resetSession();
+  // Keep only the CSRF token needed for a possible logout retry.
+  csrf.current=token;setLoading(true);setLogoutPending(false);
+  try{await pilotApi('logout',{},token);if(isCurrent(g))csrf.current='';}
+  catch(e){if(isCurrent(g)){
+   if((e as Error).message==='AUTH_REQUIRED')csrf.current='';
+   else{setLogoutPending(true);setError('logoutUnconfirmed');}
+  }}finally{if(isCurrent(g))setLoading(false);}
+ }
+ async function refresh(){
+  const g=generation.current,id=++refreshId.current;
+  const canUpdate=()=>isCurrent(g)&&id===refreshId.current;
+  try{
+   const result=await pilotApi<PilotState&{csrf:string}>('state');
+   if(!canUpdate())return false;
+   csrf.current=result.csrf;setState(result);setError(null);return true;
+  }catch(e){
+   if(canUpdate()){
+    const key=errorKey((e as Error).message);
+    if(key==='auth'){resetSession();setLoading(false);}
+    setError(key);
+   }
+   return false;
+  }finally{if(canUpdate())setLoading(false);}
+ }
+ useEffect(()=>{mounted.current=true;void refresh();return()=>{mounted.current=false;generation.current++;};},[]);
+ const run:Run=async (c,onCommitted)=>{
+  setError(null);setNotice(null);const g=generation.current;
+  try{
+   const result=await pilotApi<unknown>('commands',c,csrf.current);
+   if(!isCurrent(g))throw new Error('AUTH_REQUIRED');
+   setPending(null);if(c.op!=='summary.preview')setNotice('saved');
+   await refresh();
+   if(!isCurrent(g))throw new Error('AUTH_REQUIRED');
+   onCommitted?.();
+   return result;
+  }catch(e){
+   if(!isCurrent(g))throw e;
+   const code=(e as Error).message,key=errorKey(code);
+   setPending(key==='unavailable'&&'key' in c?{command:c,onCommitted}:null);
+   if(key==='auth'||code==='CSRF_DENIED'){resetSession();setError(key);}
+   else if(key==='denied'||key==='conflict'){
+    // Reload the authoritative role and revision before the next edit.
+    if(await refresh()&&isCurrent(g))setError(key);
+   }else setError(key);
+   throw e;
+  }
+ };
+ async function login(){
+  setLogoutPending(false);const g=resetSession();
+  try{
+   const result=await pilotApi<{csrf:string}>('test-login',{actor});
+   if(isCurrent(g)){csrf.current=result.csrf;await refresh();}
+  }catch(e){if(isCurrent(g))setError(errorKey((e as Error).message));}
+ }
  const allowed=(t:typeof tabs[number])=>state&&(t==='catalog'||t==='inbox'||(t==='work'&&['specialist','moderator'].includes(state.actor.role))||(t==='tracker'&&['specialist','parent'].includes(state.actor.role))||(['calendar','diary','summary'].includes(t)&&state.actor.role==='parent')||(t==='tasks'&&['specialist','parent'].includes(state.actor.role)));
  return <div className="pilot-page"><PageTitle intro={s('intro')}>{s('pilot')}</PageTitle><p className="notice">{s('blocked')}</p><Link to="/specialists">← {s('catalog')} · DEMO</Link>
- {error&&<p role="alert" className="request-error">{s(error)}</p>}{notice&&<p role="status">{s(notice)}</p>}{logoutPending&&<Action onClick={logout}>{s('retryLogout')}</Action>}{pending&&<Action onClick={()=>run(pending)}>{s('retry')}</Action>}
+ {error&&<p role="alert" className="request-error">{s(error)}</p>}{notice&&<p role="status">{s(notice)}</p>}{logoutPending&&<Action onClick={logout}>{s('retryLogout')}</Action>}{pending&&<Action onClick={()=>run(pending.command,pending.onCommitted)}>{s('retry')}</Action>}
  {!state?<>{loading?<p role="status">{s('refresh')}</p>:<Form label="login" onSubmit={login}><Choice label={s('actor')} value={actor} options={actors} onChange={setActor}/></Form>}</>:<>
  <div className="pilot-session"><p>{s('actor')}: {status(state.actor.id)}</p><div className="actions"><Action onClick={refresh}>{s('refresh')}</Action><Action onClick={logout}>{s('logout')}</Action></div></div>
  {state.next&&state.actor.role==='parent'&&['catalog','tracker','calendar'].includes(tab)&&<NextAction key={state.next.source} next={state.next} run={run}/>}
