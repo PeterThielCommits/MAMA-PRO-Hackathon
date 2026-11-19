@@ -52,7 +52,11 @@ export class PilotService {
  }
  next(a:Actor) {
   const contact=this.store.list<ContactData>('contact').find(r=>r.owner===a.id&&!['cancelled','closed','deleted'].includes(r.status));
-  const event=this.store.list<CalendarData>('calendar').find(r=>r.owner===a.id&&r.status!=='cancelled'&&Date.parse(r.data.timing.start)>this.clock().getTime());
+  const now=this.clock().getTime();
+  const startsAt=(r:Resource<CalendarData>)=>Date.parse(r.data.timing.start);
+  const event=this.store.list<CalendarData>('calendar')
+   .filter(r=>r.owner===a.id&&r.status!=='cancelled'&&startsAt(r)>now)
+   .sort((a,b)=>startsAt(a)-startsAt(b))[0];
   const source=contact??event;if(!source)return null;
   const mark=this.store.list<{source:string;state:string;text:string}>('next').find(r=>r.owner===a.id&&r.data.source===source.id);
   return {source:source.id,reason:contact?`contact.${contact.status}`:'calendar.upcoming',state:mark?.data.state??'active',text:mark?.data.text??''};

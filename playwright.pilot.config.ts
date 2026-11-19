@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { defineConfig, devices } from '@playwright/test';
 const databaseName = 'e2e-' + randomUUID();
-// Chromium location is environment-specific; override with
-// PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH when the browser is elsewhere.
-const executable = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || '/usr/bin/chromium';
+// Without an override, use the browser installed by Playwright.
+const executable = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
 export default defineConfig({
   outputDir: 'work/phases55-67/pilot', testDir: './tests/pilot-e2e', testMatch: 'pilot.spec.ts', workers: 1, timeout: 45000,
   // Run artifacts go to work/, never into docs/ evidence directories.

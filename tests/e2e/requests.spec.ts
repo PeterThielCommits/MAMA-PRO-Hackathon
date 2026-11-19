@@ -151,6 +151,76 @@ test('missing and expired request never create records; expired row is removed a
   expect(await rows(page)).toHaveLength(0);
 });
 
+test('retention keeps a future-dated record but removes one past seven days', async ({ page }) => {
+  await ready(page); await save(page);
+  const id = (await rows(page))[0].id as string;
+  const rewrite = (createdAt: string) => page.evaluate(({ id, createdAt }) => new Promise<void>((resolve) => {
+    const open = indexedDB.open('qoldau-demo-v1', 1);
+    open.onsuccess = () => {
+      const db = open.result; const tx = db.transaction('requests', 'readwrite'); const store = tx.objectStore('requests');
+      const read = store.get(id); read.onsuccess = () => store.put({ ...read.result, createdAt });
+      tx.oncomplete = () => { db.close(); resolve(); };
+    };
+  }), { id, createdAt });
+  await rewrite(new Date(Date.now() + 86400000).toISOString());
+  await page.reload();
+  await expect(page.getByTestId('request-metadata')).toHaveAttribute('data-status', 'recorded_demo');
+  expect(await rows(page)).toHaveLength(1);
+  await rewrite(new Date(Date.now() - 7 * 86400000 - 5000).toISOString());
+  await page.reload();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Демозапрос не найден на этом устройстве');
+  expect(await rows(page)).toHaveLength(0);
+});
+
+test('an expired attempt is checked first and needs a separate action with a new key', async ({ page }) => {
+  await ready(page);
+  await page.evaluate(() => sessionStorage.setItem('qoldau.demo-request-attempt', JSON.stringify({
+    schemaVersion: 1, idempotencyKey: 'stale-key', offerId: 'O01', specialistId: 'S01',
+    catalogVersion: 'stale-version', startedAt: Date.now() - 3 * 3600000,
+  })));
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Сохранить демозапрос', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Прежняя попытка истекла');
+  expect(await rows(page)).toHaveLength(0);
+  expect(await page.evaluate(() => sessionStorage.getItem('qoldau.demo-request-attempt'))).toBeNull();
+  await page.getByRole('button', { name: 'Сохранить демозапрос', exact: true }).click();
+  await expect(page).toHaveURL(/\/request-status\//u);
+  expect((await rows(page))[0].idempotencyKey).not.toBe('stale-key');
+});
+
+test('cleanup reports a partial result when the tab intent cannot be removed', async ({ page }) => {
+  await ready(page); await save(page);
+  await page.evaluate(() => {
+    const original = Storage.prototype.removeItem;
+    Storage.prototype.removeItem = function (key: string) {
+      if (key === 'qoldau.demo-request-attempt') throw new DOMException('denied', 'SecurityError');
+      return original.call(this, key);
+    };
+  });
+  await page.getByRole('button', { name: 'Очистить демозапросы на этом устройстве', exact: true }).click();
+  await page.getByRole('button', { name: 'Удалить демозапросы', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('ключ последней попытки');
+  expect(await rows(page)).toHaveLength(0);
+  expect(await page.evaluate(() => sessionStorage.getItem('qoldau.demo-request-attempt'))).not.toBeNull();
+  await expect(page.getByText('Локальные демозапросы удалены.', { exact: true })).toHaveCount(0);
+});
+
+test('KK cleanup confirms, clears records and the key, and survives reload', async ({ page }) => {
+  await ready(page);
+  await page.getByRole('button', { name: 'Қаз', exact: true }).click();
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Демосұрауды сақтау', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Демосұрау осы құрылғыда сақталды');
+  await page.getByRole('button', { name: 'Осы құрылғыдағы демосұрауларды тазалау', exact: true }).click();
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Деректерді қалдыру', exact: true })).toBeFocused();
+  await page.getByRole('button', { name: 'Демосұрауларды жою', exact: true }).click();
+  await expect(page.getByText('Жергілікті демосұраулар жойылды.', { exact: true })).toBeVisible();
+  expect(await rows(page)).toHaveLength(0);
+  expect(await page.evaluate(() => sessionStorage.getItem('qoldau.demo-request-attempt'))).toBeNull();
+  await page.reload();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Демосұрау осы құрылғыда табылмады');
+});
+
 test('read failure is not missing or success; denied IndexedDB never saves in memory', async ({ page }) => {
   await page.addInitScript(() => { IDBFactory.prototype.open = () => { throw new DOMException('denied', 'SecurityError'); }; });
   await page.goto('/request-status/unknown');
@@ -217,4 +287,25 @@ test('uncertain cleanup refreshes S09 instead of leaving a stale saved claim', a
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Демозапрос не найден на этом устройстве');
   await expect(page.getByText('Локальные демозапросы удалены.', { exact: true })).toHaveCount(0);
   expect(await rows(page)).toHaveLength(0);
+});
+
+
+test.describe('catalog updates with network fixture', () => {
+  test.use({ serviceWorkers: 'block' });
+
+  test('an existing request remains openable after the same catalog offer is updated', async ({ page }) => {
+    await ready(page);
+    await save(page);
+    const savedPath = new URL(page.url()).pathname;
+    await page.route(/\/(?:src\/data\/catalog\.json|assets\/catalog-[^/]+\.json)(?:\?.*)?$/, async route => {
+      if (route.request().resourceType() !== 'fetch') { await route.continue(); return; }
+      const response = await route.fetch();
+      const catalog = await response.json();
+      await route.fulfill({ response, json: { ...catalog, catalogVersion: `${catalog.catalogVersion}-next` } });
+    });
+    await page.goto('/request/O01');
+    await expect(page.getByRole('link', { name: 'Открыть сохранённый демозапрос' })).toHaveAttribute('href', savedPath);
+    await expect(page.getByRole('checkbox')).toHaveCount(0);
+    expect(await rows(page)).toHaveLength(1);
+  });
 });

@@ -21,11 +21,12 @@ function RequestForm({ offer }: { offer: Offer }) {
     return () => { mounted.current = false; };
   }, [service, offer.id]);
   const busy = state.phase === 'submitting' || state.phase === 'checking';
-  const current = state.request?.offerId === offer.id && state.request.catalogVersion === catalog.catalogVersion ? state.request : null;
+  // A committed snapshot remains historical after a catalog update.
+  const current = state.request?.offerId === offer.id && state.request.specialistId === offer.specialistId ? state.request : null;
   async function submit() {
     await service.submit(offer, catalog, acknowledged);
     const result = service.getSnapshot().request;
-    if (mounted.current && result && result.offerId === offer.id && service.getSnapshot().phase === result.status) {
+    if (mounted.current && result && result.offerId === offer.id && result.specialistId === offer.specialistId && service.getSnapshot().phase === result.status) {
       navigate(`/request-status/${encodeURIComponent(result.id)}`);
     }
   }

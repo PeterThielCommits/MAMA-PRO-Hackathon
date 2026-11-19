@@ -7,4 +7,4 @@ export async function pilotApi<T>(path:string,body?:unknown,csrf?:string):Promis
  let data;try{data=await response.json();}catch{throw new Error('SERVER_ERROR');}
  if(!response.ok)throw new Error(data.error??'SERVER_ERROR');return data as T;
 }
-export type Run=(command:Command)=>Promise<unknown>;
+export type Run=(command:Command,onCommitted?:()=>void)=>Promise<unknown>;

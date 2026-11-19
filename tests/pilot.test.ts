@@ -128,6 +128,16 @@ describe('subscriptions and next action',()=>{
   run(M,c);expect(service.state(actor(A)).changes).toHaveLength(0);const r=service.store.get(app.id);run(S,{op:'application.withdraw',id:r.id,version:r.version});expect(service.state(actor(A)).changes).toHaveLength(1);service.pump();expect(service.state(actor(A)).changes).toHaveLength(1);
   expect(JSON.stringify(service.state(actor(A)).changes)).not.toContain('PRIVATE_EVIDENCE');run(A,{op:'subscription.set',offerId:app.id,enabled:false});expect(service.state(actor(A)).subscriptions[0].status).toBe('disabled');
  });
+ it('selects the earliest future event by instant, not creation order or timezone text',()=>{
+  const add=(owner:string,start:string,end:string)=>run(owner,{op:'calendar.create',key:key(),title:'Test event',timing:{...timing,start,end},place:''});
+  const later=add(A,'2026-12-01T08:00:00Z','2026-12-01T09:00:00Z');
+  const earlier=add(A,'2026-12-01T12:00:00+05:00','2026-12-01T13:00:00+05:00');
+  add(B,'2026-11-30T06:00:00Z','2026-11-30T07:00:00Z');
+  add(A,'2026-11-09T06:00:00Z','2026-11-09T07:00:00Z');
+  expect(service.state(actor(A)).next?.source).toBe(earlier.id);
+  run(A,{op:'calendar.cancel',...earlier});
+  expect(service.state(actor(A)).next?.source).toBe(later.id);
+ });
  it('next action state cannot change request or create meeting; no duplicate action',()=>{
   const r=contact();run(A,{op:'next.set',source:r.id,state:'completed',text:'later'});run(A,{op:'next.set',source:r.id,state:'hidden',text:'later'});expect(service.store.list('next')).toHaveLength(1);expect(service.state(actor(A)).next?.state).toBe('hidden');expect(service.store.get(r.id).status).toBe('server_received');expect(service.state(actor(A)).calendar).toEqual([]);
  });
@@ -177,9 +187,26 @@ describe('HTTP boundary, sessions and real transport',()=>{
    const pub=await fetch(url+'/api/pilot/public').then(r=>r.text());expect(pub).toContain(app.id);expect(pub).not.toContain('PRIVATE_EVIDENCE');
    const login=await fetch(url+'/api/pilot/test-login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({actor:A})});const cookie=login.headers.get('set-cookie')!.split(';')[0];expect(login.headers.get('set-cookie')).toContain('HttpOnly');const session=await login.json() as {csrf:string};
    const c={op:'goal.create',key:key(),text:'HTTP_GOAL',discussedOn:null};const post=(headers:Record<string,string>,body=c)=>fetch(url+'/api/pilot/commands',{method:'POST',headers:{'content-type':'application/json',cookie,...headers},body:JSON.stringify(body)});
-   expect((await post({})).status).toBe(403);expect((await post({'x-pilot-csrf':session.csrf,origin:'https://evil.example'})).status).toBe(403);expect((await post({'x-pilot-csrf':session.csrf})).status).toBe(200);
+   expect((await post({})).status).toBe(403);expect((await post({'x-pilot-csrf':session.csrf,origin:'https://evil.example'})).status).toBe(403);expect((await post({'x-pilot-csrf':session.csrf,origin:'null'})).status).toBe(403);
+   expect((await post({'x-pilot-csrf':session.csrf,'content-type':'application/jsonp'})).status).toBe(400);
+   expect((await post({'x-pilot-csrf':session.csrf,origin:url,'content-type':'application/json; charset=utf-8'})).status).toBe(200);
    const state=await fetch(url+'/api/pilot/state',{headers:{cookie}}).then(r=>r.json()) as {goals:unknown[]};expect(state.goals).toHaveLength(1);
-   const logout=await fetch(url+'/api/pilot/logout',{method:'POST',headers:{'content-type':'application/json',cookie,'x-pilot-csrf':session.csrf},body:'{}'});expect(logout.status).toBe(200);expect((await fetch(url+'/api/pilot/state',{headers:{cookie}})).status).toBe(401);
+   const logout=await fetch(url+'/api/pilot/logout',{method:'POST',headers:{'content-type':'application/json',cookie,'x-pilot-csrf':session.csrf},body:'{}'});expect(logout.status).toBe(200);expect(logout.headers.get('set-cookie')).toContain('Secure; Path=/api/pilot; Max-Age=0');expect((await fetch(url+'/api/pilot/state',{headers:{cookie}})).status).toBe(401);
+  }finally{await new Promise<void>((resolve,reject)=>server.close(e=>e?reject(e):resolve()));}
+ });
+ it('prunes expired sessions and replaces the current cookie without touching other active sessions',async()=>{
+  const server=createPilotServer(service,'PILOT_TEST','test');await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const address=server.address();if(!address||typeof address==='string')throw Error();const url=`http://127.0.0.1:${address.port}`;
+  const login=async(id:string,cookie?:string)=>{
+   const response=await fetch(url+'/api/pilot/test-login',{method:'POST',headers:{'content-type':'application/json',...(cookie?{cookie}:{})},body:JSON.stringify({actor:id})});
+   expect(response.status).toBe(200);return response.headers.get('set-cookie')!.split(';')[0];
+  };
+  try{
+   const expired=await login(A);at=new Date(at.getTime()+3600000);
+   const retained=await login(B),previous=await login(A),current=await login(A,previous);
+   for(const [cookie,status] of [[expired,401],[previous,401],[retained,200],[current,200]] as const){
+    expect((await fetch(url+'/api/pilot/state',{headers:{cookie}})).status).toBe(status);
+   }
+   expect(service.store.db.prepare('SELECT count(*) AS n FROM sessions').get()).toMatchObject({n:2});
   }finally{await new Promise<void>((resolve,reject)=>server.close(e=>e?reject(e):resolve()));}
  });
  it('login is rate limited per address (audit F-05): 30/min, 429 afterwards',async()=>{

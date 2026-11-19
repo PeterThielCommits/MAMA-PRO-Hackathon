@@ -4,12 +4,12 @@ import type { ContactData } from '../../../server/contracts.ts';
 import type { PilotState, Run } from './api';
 import { Action, Choice, Field, Form, initialTiming, TimingFields, useWords } from './Forms';
 function ContactForm({offer,run}:{offer:PilotState['offers'][number];run:Run}){
- const {s,locale}=useWords();const [purpose,setPurpose]=useState('conditions'),[consent,setConsent]=useState(false),[key]=useState(()=>crypto.randomUUID());
- return <Form label="contactCreate" onSubmit={()=>run({op:'contact.create',key,offerId:offer.id,purpose:purpose as 'conditions',consent:true,consentVersion:'test-contact-v1'})}>
+ const {s,locale}=useWords();const [purpose,setPurpose]=useState('conditions'),[consent,setConsent]=useState(false),[key,setKey]=useState(()=>crypto.randomUUID());
+ return <Form label="contactCreate" onSubmit={()=>run({op:'contact.create',key,offerId:offer.id,purpose:purpose as 'conditions',consent:true,consentVersion:'test-contact-v1'},()=>{setKey(crypto.randomUUID());setConsent(false);})}>
  <p>{s('recipient')}: {offer.name[locale]} · {offer.title[locale]}</p><p>{s('payload')}</p><Choice label={s('purpose')} value={purpose} onChange={setPurpose} options={['conditions','availability']}/>
  <label className="checkbox"><input required type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/>{s('contactConsent')}</label></Form>;
 }
-function Complaint({offerId,run}:{offerId:string;run:Run}){const {s}=useWords();const [reason,setReason]=useState(''),[key]=useState(()=>crypto.randomUUID());return <Form label="report" onSubmit={()=>run({op:'complaint.create',key,applicationId:offerId,reason})}><Field name="reason" label={s('reason')} value={reason} onChange={setReason}/></Form>;}
+function Complaint({offerId,run}:{offerId:string;run:Run}){const {s}=useWords();const [reason,setReason]=useState(''),[key,setKey]=useState(()=>crypto.randomUUID());return <Form label="report" onSubmit={()=>run({op:'complaint.create',key,applicationId:offerId,reason},()=>{setKey(crypto.randomUUID());setReason(current=>current===reason?'':current);})}><Field name="reason" label={s('reason')} value={reason} onChange={setReason}/></Form>;}
 export function PilotCatalog({state,run}:{state:PilotState;run:Run}){
  const {s,status,locale}=useWords();return <section><h2>{s('catalog')}</h2>{!state.offers.length&&<p>{s('empty')}</p>}{state.offers.map(offer=>{
   const subscribed=state.subscriptions.some(sub=>sub.data.offerId===offer.id&&sub.status==='active');

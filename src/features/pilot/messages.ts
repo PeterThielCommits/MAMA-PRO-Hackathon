@@ -7,5 +7,5 @@ const pairs = {
 } as const;
 export type PilotKey=keyof typeof pairs;
 export function pilotText(locale:'ru'|'kk',key:PilotKey):string{return pairs[key][locale==='ru'?0:1];}
-export function pilotStatus(locale:'ru'|'kk',value:string){return value in pairs?pilotText(locale,value as PilotKey):pilotText(locale,'unknown');}
+export function pilotStatus(locale:'ru'|'kk',value:string){return Object.hasOwn(pairs,value)?pilotText(locale,value as PilotKey):pilotText(locale,'unknown');}
 export function errorKey(code:string):PilotKey{return code==='AUTH_REQUIRED'?'auth':code.includes('CONFLICT')?'conflict':code==='INVALID_INPUT'||code==='PAYLOAD_TOO_LARGE'?'invalid':code==='RATE_LIMITED'?'busy':['NOT_FOUND','CSRF_DENIED','INVALID_TRANSITION','NOT_ACCEPTING','ORIGIN_DENIED'].includes(code)?'denied':'unavailable';}
